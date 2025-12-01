@@ -165,12 +165,17 @@ export const uploadFiles = async (files: File[], projectId: string): Promise<Pro
  */
 export const createAnalysisJob = async (projectId: string, fileIds: string[]): Promise<AIJob> => {
   // Check for existing queued job
-  const { data: existingJob } = await supabase
+  const { data: existingJob, error: queryError } = await supabase
     .from('ai_jobs')
     .select('*')
     .eq('project_id', projectId)
     .eq('status', 'queued')
-    .single();
+    .maybeSingle(); // Use maybeSingle() instead of single() to avoid error if no result
+  
+  if (queryError) {
+    console.error('Error querying ai_jobs:', queryError);
+    // Continue to create new job if query fails
+  }
 
   let job: AIJob;
 
