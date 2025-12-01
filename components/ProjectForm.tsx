@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectStatus, ProjectType, ChatMessage } from '../types';
-import { saveProject, createEmptyProject, uploadFiles, runAnalysis, getProjectFiles } from '../services/projectServiceSimple';
+import { saveProject, createEmptyProject, uploadFiles, runAnalysis, getProjectFiles, getFileContent } from '../services/projectServiceSimple';
 import { createOracleChat } from '../services/geminiService';
+import { supabase } from '../lib/supabase';
 import { Upload, Cpu, Save, X, FileText, AlertTriangle, CheckCircle, Loader2, Network, Users, RefreshCw, Tag, Code, Terminal, BrainCircuit, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
 
 interface ProjectFormProps {
@@ -105,12 +106,16 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
       const allFileIds = uploadedFiles.map(f => f.id);
       await runAnalysis(project.id, allFileIds);
       
-      // Reload project
-      const updatedProject = await saveProject({
-        ...project,
-        last_touched_at: new Date().toISOString()
-      });
-      setProject(updatedProject);
+      // Reload project từ database
+      const { data: updatedProject } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', project.id)
+        .single();
+      
+      if (updatedProject) {
+        setProject(updatedProject);
+      }
       setError(null);
     } catch (err: any) {
       setError(err.message || "Analysis failed.");
