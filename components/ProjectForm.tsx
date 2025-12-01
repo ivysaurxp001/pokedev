@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, ProjectStatus, ProjectType, AIJob, AIAnalysisResult, ChatMessage } from '../types';
-import { saveProject, createEmptyProject, uploadFiles, createAnalysisJob, getJob, getProjectFiles, retryAnalysisJob, subscribeToJob, getFileContent } from '../services/projectServiceSupabase';
+import { Project, ProjectStatus, ProjectType, ChatMessage } from '../types';
+import { saveProject, createEmptyProject, uploadFiles, runAnalysis, getProjectFiles } from '../services/projectServiceSimple';
 import { createOracleChat } from '../services/geminiService';
 import { Upload, Cpu, Save, X, FileText, AlertTriangle, CheckCircle, Loader2, Network, Users, RefreshCw, Tag, Code, Terminal, BrainCircuit, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
 
@@ -14,10 +14,9 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
   const [activeTab, setActiveTab] = useState<'ingest' | 'oracle'>('ingest');
   const [project, setProject] = useState<Project>(initialProject || createEmptyProject());
   
-  // Async Job State
+  // Upload & Analysis State
   const [uploading, setUploading] = useState(false);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<AIJob['status'] | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   
   // Multi-file state
   const [uploadedFiles, setUploadedFiles] = useState<{name: string, id: string}[]>([]);
@@ -42,44 +41,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
     }
   }, [initialProject]);
 
-  // Realtime subscription for Job Status (replaces polling)
-  useEffect(() => {
-    if (!activeJobId) return;
-    
-    // If status is final, stop subscribing
-    if (jobStatus === 'done' || jobStatus === 'error') return;
-
-    // Subscribe to job updates via Supabase Realtime
-    const unsubscribe = subscribeToJob(activeJobId, (job) => {
-      if (job) {
-        setJobStatus(job.status);
-        if (job.status === 'done' && job.result) {
-          handleAnalysisComplete(job.result);
-          setError(null);
-        } else if (job.status === 'error') {
-          setError(job.error || "Analysis failed");
-        }
-      }
-    });
-
-    // Also fetch initial job state
-    const fetchInitialJob = async () => {
-      const job = await getJob(activeJobId);
-      if (job) {
-        setJobStatus(job.status);
-        if (job.status === 'done' && job.result) {
-          handleAnalysisComplete(job.result);
-        } else if (job.status === 'error') {
-          setError(job.error || "Analysis failed");
-        }
-      }
-    };
-    fetchInitialJob();
-
-    return () => {
-      unsubscribe();
-    };
-  }, [activeJobId, jobStatus]);
+  // No need for job subscription - analysis runs directly
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -89,7 +51,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
 
       try {
         // 0. Đảm bảo project đã được lưu vào database trước
-        // (Nếu là project mới, cần save trước khi upload files)
         if (!initialProject) {
           const savedProject = await saveProject({
             ...project,
@@ -98,33 +59,64 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
           setProject(savedProject);
         }
 
-        // 1. Upload Files to Supabase Storage
+        // 1. Upload Files
+        setUploading(true);
         const newUploadedFiles = await uploadFiles(files, project.id);
         
         // Update local list
         const updatedList = [...uploadedFiles, ...newUploadedFiles.map(f => ({ name: f.name, id: f.id }))];
         setUploadedFiles(updatedList);
 
-        // 2. Trigger AI Job with ALL files
-        const allFileIds = updatedList.map(f => f.id);
-        const job = await createAnalysisJob(project.id, allFileIds);
+        // 2. Run Analysis trực tiếp (client side)
+        setUploading(false);
+        setAnalyzing(true);
+        setError(null);
         
-        setActiveJobId(job.id);
-        setJobStatus('queued');
+        const allFileIds = updatedList.map(f => f.id);
+        await runAnalysis(project.id, allFileIds);
+        
+        // 3. Reload project để lấy kết quả analysis
+        const { data: updatedProject } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', project.id)
+          .single();
+        
+        if (updatedProject) {
+          setProject(updatedProject);
+        }
+        
+        setError(null);
       } catch (err: any) {
-        console.error('Upload error:', err);
-        setError(err.message || "Upload failed.");
+        console.error('Upload/Analysis error:', err);
+        setError(err.message || "Upload/Analysis failed.");
       } finally {
         setUploading(false);
+        setAnalyzing(false);
       }
     }
   };
 
   const handleRetry = async () => {
-    if (!activeJobId) return;
+    if (uploadedFiles.length === 0) return;
     setError(null);
-    setJobStatus('queued');
-    await retryAnalysisJob(activeJobId);
+    setAnalyzing(true);
+    try {
+      const allFileIds = uploadedFiles.map(f => f.id);
+      await runAnalysis(project.id, allFileIds);
+      
+      // Reload project
+      const updatedProject = await saveProject({
+        ...project,
+        last_touched_at: new Date().toISOString()
+      });
+      setProject(updatedProject);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || "Analysis failed.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleAnalysisComplete = (analysis: AIAnalysisResult) => {
@@ -253,8 +245,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
     </div>
   );
 
-  const isScanning = jobStatus === 'queued' || jobStatus === 'running';
-  const isError = jobStatus === 'error';
+  const isScanning = uploading || analyzing;
+  const isError = !!error;
 
   return (
     <div className="bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex flex-col h-[90vh] md:h-[85vh] relative w-full">
@@ -346,7 +338,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
                             <div className="flex flex-col items-center justify-center py-4">
                                 <Loader2 className="animate-spin text-cyan-400 mb-4" size={32}/>
                                 <span className="text-cyan-300 font-tech text-base tracking-wider animate-pulse">
-                                    {jobStatus === 'queued' ? 'QUEUED...' : 'NEURAL NET PROCESSING...'}
+                                    {uploading ? 'UPLOADING...' : 'ANALYZING...'}
                                 </span>
                             </div>
                         ) : (

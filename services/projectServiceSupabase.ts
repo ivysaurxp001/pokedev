@@ -219,24 +219,37 @@ export const createAnalysisJob = async (projectId: string, fileIds: string[]): P
   // Note: In production, the database webhook will automatically trigger the Edge Function
   // This is a fallback if webhooks aren't configured
   try {
+    // Use anon key if no session (for development without auth)
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          project_id,
-          file_ids,
-        }),
-      }).catch((err) => {
-        console.warn('Edge function trigger failed (webhook should handle this):', err);
+    const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    const response = await fetch(EDGE_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+      },
+      body: JSON.stringify({
+        project_id,
+        file_ids,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn('Edge function trigger failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
       });
+      // Don't throw - job is created, Edge Function might be called later via webhook
+    } else {
+      console.log('Edge function triggered successfully');
     }
   } catch (err) {
     console.warn('Could not trigger edge function manually:', err);
+    // Don't throw - job is created, might be processed later
   }
 
   return job;

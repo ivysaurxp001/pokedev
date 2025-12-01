@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, ProjectStatus, ProjectType } from '../types';
-import { getProjects } from '../services/projectServiceSupabase';
+import { getProjects } from '../services/projectServiceSimple';
 import ProjectCard from './ProjectCard';
 import ProjectForm from './ProjectForm';
 import { Search, Filter, Plus, Activity, Layers, Server } from 'lucide-react';
