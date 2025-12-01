@@ -1,0 +1,5 @@
+{
+  "name": "Project Pokedex (Dev Brain)",
+  "description": "A second brain for developers to organize scattered projects. Upload READMEs, let AI analyze and categorize them into a searchable dashboard.",
+  "requestFramePermissions": []
+}
