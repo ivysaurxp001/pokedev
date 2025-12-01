@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { isAdmin, login, logout, setAdminPassword } from '../utils/adminAuth';
 import { exportDatabaseAsFile, importDatabaseFromFile } from '../services/databaseService';
-import { Lock, Unlock, Download, Upload, Key, AlertCircle, CheckCircle } from 'lucide-react';
+import { Lock, Unlock, Download, Upload, Key, AlertCircle, CheckCircle, X } from 'lucide-react';
 
 interface AdminPanelProps {
   onClose: () => void;
