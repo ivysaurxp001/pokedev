@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectStatus, ProjectType, AIJob, AIAnalysisResult, ChatMessage } from '../types';
-import { saveProject, createEmptyProject, uploadFilesMock, createAnalysisJobMock, getJob, getProjectFiles, retryAnalysisJobMock } from '../services/projectService';
+import { saveProject, createEmptyProject, uploadFiles, createAnalysisJob, getJob, getProjectFiles, retryAnalysisJob, subscribeToJob, getFileContent } from '../services/projectServiceSupabase';
 import { createOracleChat } from '../services/geminiService';
 import { Upload, Cpu, Save, X, FileText, AlertTriangle, CheckCircle, Loader2, Network, Users, RefreshCw, Tag, Code, Terminal, BrainCircuit, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
 
@@ -34,32 +34,51 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
   // Initialize uploaded files list if editing
   useEffect(() => {
     if (initialProject) {
-        const files = getProjectFiles(initialProject.id);
+      const loadFiles = async () => {
+        const files = await getProjectFiles(initialProject.id);
         setUploadedFiles(files.map(f => ({ name: f.name, id: f.id })));
+      };
+      loadFiles();
     }
   }, [initialProject]);
 
-  // Polling for Job Status
+  // Realtime subscription for Job Status (replaces polling)
   useEffect(() => {
     if (!activeJobId) return;
     
-    // If status is final or error, stop polling unless we are actively retrying (status set back to queued)
-    if (jobStatus === 'done' || (jobStatus === 'error' && !activeJobId)) return;
+    // If status is final, stop subscribing
+    if (jobStatus === 'done' || jobStatus === 'error') return;
 
-    const interval = setInterval(() => {
-        const job = getJob(activeJobId);
-        if (job) {
-            setJobStatus(job.status);
-            if (job.status === 'done' && job.result) {
-                handleAnalysisComplete(job.result);
-                setError(null);
-            } else if (job.status === 'error') {
-                setError(job.error || "Analysis failed");
-            }
+    // Subscribe to job updates via Supabase Realtime
+    const unsubscribe = subscribeToJob(activeJobId, (job) => {
+      if (job) {
+        setJobStatus(job.status);
+        if (job.status === 'done' && job.result) {
+          handleAnalysisComplete(job.result);
+          setError(null);
+        } else if (job.status === 'error') {
+          setError(job.error || "Analysis failed");
         }
-    }, 1000);
+      }
+    });
 
-    return () => clearInterval(interval);
+    // Also fetch initial job state
+    const fetchInitialJob = async () => {
+      const job = await getJob(activeJobId);
+      if (job) {
+        setJobStatus(job.status);
+        if (job.status === 'done' && job.result) {
+          handleAnalysisComplete(job.result);
+        } else if (job.status === 'error') {
+          setError(job.error || "Analysis failed");
+        }
+      }
+    };
+    fetchInitialJob();
+
+    return () => {
+      unsubscribe();
+    };
   }, [activeJobId, jobStatus]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,21 +88,21 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
       setUploading(true);
 
       try {
-        // 1. Upload Files
-        const newUploadedFiles = await uploadFilesMock(files, project.id);
+        // 1. Upload Files to Supabase Storage
+        const newUploadedFiles = await uploadFiles(files, project.id);
         
         // Update local list
         const updatedList = [...uploadedFiles, ...newUploadedFiles.map(f => ({ name: f.name, id: f.id }))];
         setUploadedFiles(updatedList);
 
-        // 2. Trigger AI Job with ALL files (Simulating a re-scan with new context)
+        // 2. Trigger AI Job with ALL files
         const allFileIds = updatedList.map(f => f.id);
-        const job = await createAnalysisJobMock(project.id, allFileIds);
+        const job = await createAnalysisJob(project.id, allFileIds);
         
         setActiveJobId(job.id);
         setJobStatus('queued');
-      } catch (err) {
-        setError("Upload failed.");
+      } catch (err: any) {
+        setError(err.message || "Upload failed.");
       } finally {
         setUploading(false);
       }
@@ -94,7 +113,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
     if (!activeJobId) return;
     setError(null);
     setJobStatus('queued');
-    await retryAnalysisJobMock(activeJobId);
+    await retryAnalysisJob(activeJobId);
   };
 
   const handleAnalysisComplete = (analysis: AIAnalysisResult) => {
@@ -135,14 +154,19 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
         let session = chatSession;
         if (!session) {
             // Initialize session on first message
-            const files = getProjectFiles(project.id);
+            const files = await getProjectFiles(project.id);
             if (files.length === 0) {
                 setChatMessages(prev => [...prev, { role: 'model', content: "SYSTEM ERROR: No source files found. Please upload files to initialize Oracle.", timestamp: Date.now() }]);
                 setIsChatting(false);
                 return;
             }
-            // Transform to simpler object for service
-            const contextFiles = files.map(f => ({ name: f.name, content: f.content || '' }));
+            // Download file contents from Storage
+            const contextFiles = await Promise.all(
+              files.map(async (f) => ({
+                name: f.name,
+                content: await getFileContent(f).catch(() => '')
+              }))
+            );
             session = createOracleChat(contextFiles);
             setChatSession(session);
         }
@@ -166,14 +190,18 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalProject = {
-        ...project,
-        last_touched_at: new Date().toISOString()
+    try {
+      const finalProject = {
+          ...project,
+          last_touched_at: new Date().toISOString()
+      };
+      await saveProject(finalProject);
+      onSave();
+    } catch (err: any) {
+      setError(err.message || "Failed to save project");
     }
-    saveProject(finalProject);
-    onSave();
   };
 
   const renderArrayInput = (

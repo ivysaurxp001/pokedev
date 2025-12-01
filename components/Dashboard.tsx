@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, ProjectStatus, ProjectType } from '../types';
-// TODO: Switch to Supabase after setup
-// import { getProjects } from '../services/projectServiceSupabase';
-import { getProjects } from '../services/projectService';
+import { getProjects } from '../services/projectServiceSupabase';
 import ProjectCard from './ProjectCard';
 import ProjectForm from './ProjectForm';
 import { Search, Filter, Plus, Activity, Layers, Server } from 'lucide-react';
@@ -19,10 +17,8 @@ const Dashboard: React.FC = () => {
 
   // Load data
   const refreshProjects = async () => {
-    // TODO: Switch to async when using Supabase
-    // const projects = await getProjects();
-    // setProjects(projects);
-    setProjects(getProjects());
+    const projects = await getProjects();
+    setProjects(projects);
   };
 
   useEffect(() => {
