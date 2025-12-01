@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, ProjectStatus, ProjectType } from '../types';
+// TODO: Switch to Supabase after setup
+// import { getProjects } from '../services/projectServiceSupabase';
 import { getProjects } from '../services/projectService';
 import ProjectCard from './ProjectCard';
 import ProjectForm from './ProjectForm';
@@ -16,7 +18,10 @@ const Dashboard: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
 
   // Load data
-  const refreshProjects = () => {
+  const refreshProjects = async () => {
+    // TODO: Switch to async when using Supabase
+    // const projects = await getProjects();
+    // setProjects(projects);
     setProjects(getProjects());
   };
 
