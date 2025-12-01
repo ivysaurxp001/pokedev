@@ -88,6 +88,16 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
       setUploading(true);
 
       try {
+        // 0. Đảm bảo project đã được lưu vào database trước
+        // (Nếu là project mới, cần save trước khi upload files)
+        if (!initialProject) {
+          const savedProject = await saveProject({
+            ...project,
+            last_touched_at: new Date().toISOString()
+          });
+          setProject(savedProject);
+        }
+
         // 1. Upload Files to Supabase Storage
         const newUploadedFiles = await uploadFiles(files, project.id);
         
@@ -102,6 +112,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
         setActiveJobId(job.id);
         setJobStatus('queued');
       } catch (err: any) {
+        console.error('Upload error:', err);
         setError(err.message || "Upload failed.");
       } finally {
         setUploading(false);

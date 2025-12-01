@@ -132,7 +132,26 @@ export const uploadFiles = async (files: File[], projectId: string): Promise<Pro
     if (dbError) {
       // Cleanup: delete uploaded file if DB insert fails
       await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
-      throw new Error(`Failed to create file record: ${dbError.message}`);
+      
+      // Log full error for debugging
+      console.error('Full DB error:', {
+        message: dbError.message,
+        code: dbError.code,
+        details: dbError.details,
+        hint: dbError.hint,
+        error: dbError
+      });
+      
+      // Provide more detailed error message
+      if (dbError.code === '23505') {
+        throw new Error(`File already exists: ${file.name}. Please try again.`);
+      } else if (dbError.code === 'PGRST301' || dbError.message.includes('row-level security') || dbError.message.includes('RLS')) {
+        throw new Error(`Permission denied (RLS). Run DISABLE_RLS_TEMP.sql or RESET_AND_SETUP.sql in Supabase SQL Editor.`);
+      } else if (dbError.code === '23503' || dbError.message.includes('foreign key') || dbError.message.includes('project_id')) {
+        throw new Error(`Project not found in database. Please save the project first before uploading files. Project ID: ${projectId}`);
+      } else {
+        throw new Error(`Failed to create file record: ${dbError.message} (Code: ${dbError.code || 'unknown'})`);
+      }
     }
 
     uploadedFiles.push(dbFile);
