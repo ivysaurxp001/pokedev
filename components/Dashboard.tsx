@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, ProjectStatus, ProjectType } from '../types';
 import { getProjects } from '../services/projectServiceSimple';
+import { isAdmin } from '../utils/adminAuth';
 import ProjectCard from './ProjectCard';
 import ProjectForm from './ProjectForm';
-import { Search, Filter, Plus, Activity, Layers, Server } from 'lucide-react';
+import AdminPanel from './AdminPanel';
+import { Search, Filter, Plus, Activity, Layers, Server, Settings, Lock } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -14,6 +16,8 @@ const Dashboard: React.FC = () => {
   
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminStatus, setAdminStatus] = useState(isAdmin());
 
   // Load data
   const refreshProjects = async () => {
@@ -23,6 +27,11 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     refreshProjects();
+    // Check admin status periodically
+    const interval = setInterval(() => {
+      setAdminStatus(isAdmin());
+    }, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const filteredProjects = projects.filter(p => {
@@ -92,14 +101,32 @@ const Dashboard: React.FC = () => {
                 </div>
              </div>
              
-              {/* Action */}
-             <button 
-                onClick={() => setIsCreating(true)}
-                className="bg-cyan-600/10 hover:bg-cyan-600/20 border border-cyan-500/30 hover:border-cyan-400 text-cyan-400 hover:text-cyan-200 p-4 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
-             >
-                <Plus size={24} className="group-hover:scale-110 transition-transform" />
-                <span className="font-mono-tech text-xs uppercase tracking-widest">Init New Project</span>
-             </button>
+              {/* Action - Only show if admin */}
+             {adminStatus ? (
+               <button 
+                  onClick={() => setIsCreating(true)}
+                  className="bg-cyan-600/10 hover:bg-cyan-600/20 border border-cyan-500/30 hover:border-cyan-400 text-cyan-400 hover:text-cyan-200 p-4 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+               >
+                  <Plus size={24} className="group-hover:scale-110 transition-transform" />
+                  <span className="font-mono-tech text-xs uppercase tracking-widest">Init New Project</span>
+               </button>
+             ) : (
+               <div className="bg-slate-900/40 border border-slate-800 p-4 flex flex-col items-center justify-center gap-2 opacity-50">
+                  <Lock size={24} className="text-slate-600" />
+                  <span className="font-mono-tech text-xs uppercase tracking-widest text-slate-600">Admin Only</span>
+               </div>
+             )}
+        </div>
+
+        {/* Admin Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowAdminPanel(true)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white font-mono-tech text-xs uppercase tracking-wider transition-colors flex items-center gap-2"
+          >
+            <Settings size={14} />
+            {adminStatus ? 'Admin' : 'Login'}
+          </button>
         </div>
 
         {/* Console Search Bar */}
@@ -163,7 +190,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <p className="text-slate-500 font-tech text-lg mb-2">NO RECORDS FOUND</p>
                 <p className="text-slate-600 text-sm font-mono-tech mb-6">Database query returned 0 results.</p>
-                {projects.length === 0 && (
+                {projects.length === 0 && adminStatus && (
                     <button onClick={() => setIsCreating(true)} className="text-cyan-400 hover:text-cyan-300 font-mono-tech text-xs border border-cyan-500/30 px-4 py-2 hover:bg-cyan-500/10 transition-colors">
                         INITIALIZE FIRST ENTRY
                     </button>
@@ -171,6 +198,16 @@ const Dashboard: React.FC = () => {
             </div>
         )}
       </div>
+
+      {/* Admin Panel Modal */}
+      {showAdminPanel && createPortal(
+        <AdminPanel onClose={() => {
+          setShowAdminPanel(false);
+          setAdminStatus(isAdmin());
+          refreshProjects();
+        }} />,
+        document.body
+      )}
 
       {/* Modal Overlay with Portal */}
       {(isCreating || editingProject) && createPortal(

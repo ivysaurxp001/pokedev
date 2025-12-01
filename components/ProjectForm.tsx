@@ -3,6 +3,7 @@ import { Project, ProjectStatus, ProjectType, ChatMessage } from '../types';
 import { saveProject, createEmptyProject, uploadFiles, runAnalysis, getProjectFiles, getFileContent } from '../services/projectServiceSimple';
 import { createOracleChat } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
+import { isAdmin } from '../utils/adminAuth';
 import { Upload, Cpu, Save, X, FileText, AlertTriangle, CheckCircle, Loader2, Network, Users, RefreshCw, Tag, Code, Terminal, BrainCircuit, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
 
 interface ProjectFormProps {
@@ -200,6 +201,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ initialProject, onClose, onSa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check admin permission
+    if (!isAdmin()) {
+      setError("Chỉ admin mới có thể tạo/chỉnh sửa project!");
+      return;
+    }
+    
     try {
       const finalProject = {
           ...project,

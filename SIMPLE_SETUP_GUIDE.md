@@ -78,3 +78,4 @@ Code đã được update để:
 ### Lỗi "Analysis failed"
 → Kiểm tra Gemini API key có đúng không, có quota không
 
+
