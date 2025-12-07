@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { config } from '../config';
 import Avatar3DViewer from './Avatar3DViewer';
-import { Database, LayoutGrid, Plus, Hexagon, User, Mail, Github, Linkedin, Twitter, Send } from 'lucide-react';
+import { Database, LayoutGrid, Plus, Hexagon, User, Mail, Github, Linkedin, Twitter, Send, Menu, X } from 'lucide-react';
 
 type ViewType = 'dashboard' | 'create' | 'about' | 'contact';
 
@@ -71,13 +71,49 @@ const NavButton3D: React.FC<NavButton3DProps> = ({ onClick, isActive, icon, labe
   );
 };
 const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const handleNavigate = (view: ViewType) => {
+    onNavigate(view);
+    setIsSidebarOpen(false); // Close sidebar on mobile after navigation
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col md:flex-row relative overflow-hidden">
       {/* Background Grid Effect */}
       <div className="absolute inset-0 bg-grid pointer-events-none z-0"></div>
 
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Hexagon className="text-cyan-500 fill-cyan-500/10" size={28} strokeWidth={1.5} />
+            <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-cyan-300" size={12} />
+          </div>
+          <div>
+            <h1 className="font-tech font-bold text-lg tracking-tighter text-white">{config.name.split(' ')[0]}</h1>
+            <p className="text-[9px] text-cyan-500/80 font-mono-tech tracking-widest uppercase">{config.title}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Sidebar Overlay for Mobile */}
+      {isSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-20"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-full md:w-72 bg-slate-950/80 backdrop-blur-md border-r border-slate-800 flex flex-col fixed md:relative z-20 bottom-0 md:bottom-auto top-0 md:h-screen shadow-2xl shadow-black">
+      <aside className={`w-72 bg-slate-950/95 backdrop-blur-md border-r border-slate-800 flex flex-col fixed md:relative z-20 h-screen shadow-2xl shadow-black transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}>
         <div className="p-4 border-b border-slate-800/60 flex items-center gap-3 relative overflow-hidden group">
           {/* Logo Glow */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500"></div>
@@ -116,7 +152,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) =>
           <div className="px-4 py-2 text-xs font-mono-tech text-slate-500 uppercase tracking-widest">Portfolio</div>
 
           <NavButton3D
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => handleNavigate('dashboard')}
             isActive={currentView === 'dashboard'}
             icon={<LayoutGrid size={18} />}
             label="Projects"
@@ -125,7 +161,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) =>
           />
 
           <NavButton3D
-            onClick={() => onNavigate('about')}
+            onClick={() => handleNavigate('about')}
             isActive={currentView === 'about'}
             icon={<User size={18} />}
             label="About Me"
@@ -134,7 +170,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) =>
           />
 
           <NavButton3D
-            onClick={() => onNavigate('contact')}
+            onClick={() => handleNavigate('contact')}
             isActive={currentView === 'contact'}
             icon={<Mail size={18} />}
             label="Contact"
@@ -145,7 +181,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) =>
           <div className="px-4 py-2 pt-4 text-xs font-mono-tech text-slate-500 uppercase tracking-widest">Admin</div>
 
           <NavButton3D
-            onClick={() => onNavigate('create')}
+            onClick={() => handleNavigate('create')}
             isActive={currentView === 'create'}
             icon={<Plus size={18} />}
             label="Add Project"
@@ -194,7 +230,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentView }) =>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto h-screen relative z-10 scroll-smooth">
+      <main className="flex-1 overflow-y-auto h-screen relative z-10 scroll-smooth pt-16 md:pt-0">
         <div className="max-w-7xl mx-auto p-4 md:p-8 pb-24 md:pb-8">
           {children}
         </div>
